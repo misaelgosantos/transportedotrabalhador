@@ -2,12 +2,7 @@ import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
-enum LocationPermissionState {
-  granted,
-  denied,
-  deniedForever,
-  serviceDisabled
-}
+enum LocationPermissionState { granted, denied, deniedForever, serviceDisabled }
 
 class LocationService {
   static final LocationService _instance = LocationService._internal();
@@ -33,7 +28,7 @@ class LocationService {
     if (!serviceEnabled) return LocationPermissionState.serviceDisabled;
 
     LocationPermission permission = await Geolocator.checkPermission();
-    
+
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
@@ -45,17 +40,22 @@ class LocationService {
     if (permission == LocationPermission.deniedForever) {
       return LocationPermissionState.deniedForever;
     }
-    if (permission == LocationPermission.denied) {
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.unableToDetermine) {
       return LocationPermissionState.denied;
     }
-    return LocationPermissionState.granted;
+    if (permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse) {
+      return LocationPermissionState.granted;
+    }
+    return LocationPermissionState.denied;
   }
 
   /// Abre as configurações do app para o usuário ativar manualmente
   Future<void> openAppSettings() async {
     await Geolocator.openAppSettings();
   }
-  
+
   /// Abre as configurações de localização do dispositivo
   Future<void> openLocationSettings() async {
     await Geolocator.openLocationSettings();
@@ -63,10 +63,10 @@ class LocationService {
 
   /// Busca a posição imediata do usuário (One-Shot)
   Future<LatLng?> getCurrentLocation({bool requestPermission = true}) async {
-    final state = requestPermission 
-      ? await requestLocationPermission() 
-      : await checkPermissionState();
-      
+    final state = requestPermission
+        ? await requestLocationPermission()
+        : await checkPermissionState();
+
     if (state != LocationPermissionState.granted) {
       throw Exception(_getErrorMessage(state));
     }
@@ -80,7 +80,11 @@ class LocationService {
       );
       return LatLng(position.latitude, position.longitude);
     } catch (e) {
-      throw Exception('Erro ao obter localização: $e');
+      throw Exception(
+        'Não foi possível obter sua localização. Verifique se o GPS está '
+        'ativo e, no navegador, se o site está em HTTPS ou localhost. '
+        'Detalhes: $e',
+      );
     }
   }
 
@@ -107,7 +111,9 @@ class LocationService {
       distanceFilter: 10, // Atualiza se houver movimento de 10 metros
     );
 
-    return Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+    return Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen(
       (Position position) {
         onLocationUpdated(LatLng(position.latitude, position.longitude));
       },

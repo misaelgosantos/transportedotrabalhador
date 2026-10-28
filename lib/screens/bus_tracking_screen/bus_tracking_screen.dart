@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,6 +42,8 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
   bool _mapReady = false;
   bool _routeLoading = true;
   bool _locationLoading = false;
+  bool _showAppSettingsButton = false;
+  bool _showLocationSettingsButton = false;
   String? _routeError;
   String? _locationError;
 
@@ -137,10 +140,37 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
     setState(() {
       _locationLoading = true;
       _locationError = null;
+      _showAppSettingsButton = false;
+      _showLocationSettingsButton = false;
     });
 
     try {
-      final location = await _locationService.getCurrentLocation();
+      final permissionState = await _locationService
+          .requestLocationPermission();
+      if (permissionState != LocationPermissionState.granted) {
+        switch (permissionState) {
+          case LocationPermissionState.denied:
+            _locationError = kIsWeb
+                ? 'Permita a localização nas configurações do navegador e tente novamente.'
+                : 'A permissão de localização foi negada. Permita o acesso e tente novamente.';
+          case LocationPermissionState.deniedForever:
+            _locationError = kIsWeb
+                ? 'A localização está bloqueada no navegador. Altere a permissão do site para permitir.'
+                : 'A localização está bloqueada para este app. Ative a permissão nas configurações.';
+            _showAppSettingsButton = !kIsWeb;
+          case LocationPermissionState.serviceDisabled:
+            _locationError =
+                'Ative o serviço de localização do dispositivo e tente novamente.';
+            _showLocationSettingsButton = !kIsWeb;
+          case LocationPermissionState.granted:
+            break;
+        }
+        return;
+      }
+
+      final location = await _locationService.getCurrentLocation(
+        requestPermission: false,
+      );
       if (location != null) {
         _userLocation = location;
         await _startLocationStream();
@@ -190,24 +220,6 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
       );
     }
 
-    if (_routeError != null) {
-      return _buildRouteStatus(
-        context,
-        icon: Icon(
-          Icons.map_outlined,
-          size: 44,
-          color: Theme.of(context).colorScheme.error,
-        ),
-        title: 'Não foi possível abrir o mapa',
-        message: 'Confira sua conexão e tente carregar o trajeto novamente.',
-        action: FilledButton.icon(
-          onPressed: _loadRoadRoute,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Tentar novamente'),
-        ),
-      );
-    }
-
     final distanceKm = _userLocation == null || _vanLocation == null
         ? null
         : GeoMathUtils.fastDistance(
@@ -227,6 +239,9 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _initialMapCenter,
+              interactionOptions: InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
               initialZoom: 14.5,
               minZoom: 10,
               maxZoom: 19,
@@ -354,9 +369,25 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (_routeError != null) ...[
+                            Text(
+                              'Não foi possível carregar o trajeto pelas ruas. '
+                              'Você ainda pode usar o mapa e sua localização.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: _loadRoadRoute,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Tentar carregar o trajeto'),
+                            ),
+                          ],
                           if (distanceKm == null)
                             const Text(
-                              'Ative sua localização para ver a distância até a van.',
+                              'Toque em "Minha localização" e permita o acesso '
+                              'para mostrar sua posição no mapa.',
                               textAlign: TextAlign.center,
                             )
                           else
@@ -375,6 +406,29 @@ class _BusTrackingScreenState extends State<BusTrackingScreen> {
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.error,
                               ),
+                            ),
+                          ],
+                          if (_showAppSettingsButton ||
+                              _showLocationSettingsButton) ...[
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: _showAppSettingsButton
+                                  ? _locationService.openAppSettings
+                                  : _locationService.openLocationSettings,
+                              icon: const Icon(Icons.settings),
+                              label: Text(
+                                _showAppSettingsButton
+                                    ? 'Abrir configurações do app'
+                                    : 'Ativar localização do dispositivo',
+                              ),
+                            ),
+                          ],
+                          if (_locationError != null && kIsWeb) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'No navegador, use o ícone ao lado do endereço do site para permitir a localização. Ela só funciona em HTTPS ou localhost.',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
                           const SizedBox(height: 12),
