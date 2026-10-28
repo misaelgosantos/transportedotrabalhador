@@ -1,0 +1,19 @@
+{
+    "name": "Transporte do Trabalhador",
+    "short_name": "Transporte",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#0284C7",
+    "theme_color": "#0284C7",
+    "description": "Acompanhe vans em rotas simuladas.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "assets/assets/images/icon_bus.png",
+            "sizes": "1024x1024",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ]
+}
